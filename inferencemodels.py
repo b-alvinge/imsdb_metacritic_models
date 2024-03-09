@@ -10,13 +10,15 @@ from sklearn.metrics import mean_squared_error
 from sklearn.metrics import r2_score
 from math import sqrt
 
+
 from causalnlp import Autocoder
 
 from tqdm import tqdm
 
+import torch
 
 # Example: Load your dataset
-df = pd.read_excel('./data/in/title_script_summary_genres_score.xlsx')
+df = pd.read_hdf('./data/in/title_script_summary_genres_score.h5')
 
 print("data rows before cleaning scores: ",len(df))
 
@@ -27,10 +29,11 @@ print("data rows after cleaning scores: ",len(df))
 df['script'] = df['script'].replace(r'_x000D_','', regex=True)
 
 ac = Autocoder()
+torch.cuda.empty_cache()
 
-
-# Function to infer genres for a given movie script.
-def infer_genres(df):
+# Function to infer genres for a given text.
+def infer_genres(df, input_column, multilabel):
+    genre_nli_template = "The genre of this text is {}"
     genres = [
         "Horror",
         "Action",
@@ -47,16 +50,47 @@ def infer_genres(df):
         "Detective",
         "Love"
     ]
-    df = ac.code_custom_topics(docs=df['meta_summary'].values, df=df, labels=genres,
-                               nli_template = "The genre of this text is {}", max_length=1024, multilabel=True,
-                               batch_size=32)
-
+    df = ac.code_custom_topics(docs=df[input_column].values, df=df, labels=genres,
+                               nli_template = genre_nli_template, max_length=512, multilabel=multilabel,
+                               batch_size=12)
     return df
 
-# Vectorize the training and testing scripts
-df_genres = infer_genres(df)
+# Function to infer aesthetic qualities for a given text.
+def infer_aesthetic_qualities(df, input_column, multilabel):
+    aesthetic_nli_template = "This text has {}"
+    aesthetic_qualities = [
+        'Engaging Characters',
+        'A Compelling Plot',
+        'Universal Themes',
+        'Immersive World-building',
+        'Emotional Resonance'
+    ]
+    s = (df.pop(input_column)
+         .str.split(r'\s*\r\n\s*\r\n(\r\n)*', expand=True, regex=True)
+         .stack()
+         .rename(input_column)
+         .reset_index(level=1, drop=True))
 
-df_genres.to_excel('./data/out/title_script_summary_genres_score_truby_genres.xlsx')
+    df = df.join(s).reset_index(drop=True)
+
+    df[input_column].replace(r'^\s*$', np.nan, inplace=True, regex=True)
+    df.dropna(subset=[input_column], inplace=True)
+
+
+    df = ac.code_custom_topics(docs=df[input_column].values, df=df[['title', 'script']], labels=aesthetic_qualities,
+                               nli_template = aesthetic_nli_template, max_length=512, multilabel=multilabel,
+                               batch_size=32)
+    return df
+
+
+#df_out = infer_genres(df, 'meta_summary', multilabel=True)
+
+
+df_out = infer_aesthetic_qualities(df.iloc[0:2], 'script', multilabel=True)
+
+
+
+df_out.to_hdf('./data/out/title_script_aesthetic_qualities.h5', key='df')
 
 
 # Split the dataset into training and testing sets
