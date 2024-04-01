@@ -2,13 +2,22 @@ import pandas as pd
 
 import numpy as np
 
+import random
 
 from causalnlp import Autocoder
+
+from scipy import stats
+
+import statsmodels.formula.api as smf
+
+
+
+from nltk.corpus import wordnet as wn
 
 import torch
 
 # Example: Load your dataset
-df = pd.read_hdf('./data/in/title_script_summary_genres_score.h5')
+df = pd.read_hdf('./data/in/title_summary_genres_score.h5')
 
 print("data rows before cleaning scores: ",len(df))
 
@@ -16,7 +25,8 @@ df = df[pd.to_numeric(df['meta_score'], errors='coerce').notnull()]
 
 print("data rows after cleaning scores: ",len(df))
 
-df['script'] = df['script'].replace(r'_x000D_','', regex=True)
+if 'script' in df.columns:
+    df['script'] = df['script'].replace(r'_x000D_','', regex=True)
 
 ac = Autocoder()
 torch.cuda.empty_cache()
@@ -68,7 +78,11 @@ def infer_genres(df, input_column, multilabel, line_split):
 #function to infer amoral forms within a given story.
 def infer_amorality(df, input_column, multilabel, line_split):
     amoral_nli_template = "This story is {}"
-    amoralities = ['Glorifying Violence']
+    amoralities = ['Glorifying Violence',
+                   "More Fiction than Reality",
+                   "Inducing Fear for Entertainment",
+                   "Exciting",
+                   "Beautiful"]
 
     if line_split:
         s = (df.pop(input_column)
@@ -193,18 +207,67 @@ def infer_aesthetic_qualities(df, input_column, multilabel, line_split):
     df = ac.code_custom_topics(docs=df[input_column].values, df=df[['title', input_column, 'meta_genres', 'meta_score']], labels=aesthetic_qualities,
                                nli_template = aesthetic_nli_template, max_length=512, multilabel=multilabel,
                                batch_size=32)
-    return df                                        
+    return df
+
+#function to search for (hopefully maximally effective) inference criteria in order to distinguish text (summaries) with high meta score from low meta score.
+def search_inference_criteria(df, input_column, multilabel):
+    search_nli_template = "This story is {}"
+
+    random_df = pd.DataFrame(random.sample(df.values.tolist(), 10999), columns=df.columns)
+
+    adjectives = []
+    for i in wn.all_synsets():
+        if i.pos() in ['a', 's']:
+            for j in i.lemmas():
+                adjectives.append(j.name())
+
+
+    n = 100
+
+    while len(adjectives) > 0:
+        print("number of adjectives left: ", len(adjectives))
+        try:
+            high_low_inference_criteria = random.sample(adjectives, n)
+        except ValueError:
+            high_low_inference_criteria = random.sample(adjectives, len(adjectives))
+
+
+
+        df_out = ac.code_custom_topics(docs=random_df[input_column].values, df=random_df[['title', input_column, 'meta_genres', 'meta_score']], labels=high_low_inference_criteria,
+                                   nli_template = search_nli_template, max_length=512, multilabel=multilabel,
+                                   batch_size=32)
+
+        # standardizing dataframe
+        df_out['meta_score'] = pd.to_numeric(df_out['meta_score'])
+        df_z = df_out.select_dtypes(include=[np.number]).dropna().apply(stats.zscore)
+
+        start = 'Q("'
+        end = '")'
+        high_low_inference_criteria_qued = ["{}{}{}".format(start,i,end) for i in high_low_inference_criteria]
+
+        independent_variables_formula = '+'.join(high_low_inference_criteria_qued)
+
+        # fitting regression
+        formula = 'Q("meta_score") ~ ' + independent_variables_formula
+        result = smf.ols(formula, data=df_z).fit()
+
+        # checking results
+        print(result.summary())
+
+        adjectives = [ele for ele in adjectives if ele not in high_low_inference_criteria]
+
 
 
 #df_out = infer_genres(df, 'script', multilabel=True, line_split=True)
 
-df_out = infer_amorality(df, 'meta_summary', multilabel=True, line_split=False)
+#df_out = infer_amorality(df, 'meta_summary', multilabel=True, line_split=False)
 
 #df_out = infer_genre_philosophy(df, 'script', multilabel=True, line_split=True)
 
 #df_out = infer_aesthetic_qualities(df, 'script', multilabel=True, line_split=True)
 
+search_inference_criteria(df, 'meta_summary', multilabel=True)
 
 
-df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_amorality_multilabel.h5', key='df')
+df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_amorality_multilabel_big.h5', key='df')
 
