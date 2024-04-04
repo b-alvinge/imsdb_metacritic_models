@@ -10,7 +10,7 @@ from scipy import stats
 
 import statsmodels.formula.api as smf
 
-
+import time
 
 from nltk.corpus import wordnet as wn
 
@@ -213,7 +213,9 @@ def infer_aesthetic_qualities(df, input_column, multilabel, line_split):
 def search_inference_criteria(df, input_column, multilabel):
     search_nli_template = "This story is {}"
 
-    random_df = pd.DataFrame(random.sample(df.values.tolist(), 10999), columns=df.columns)
+    stratified_sample_df = df.groupby('meta_score', group_keys=False).apply(lambda x: x.sample(frac=0.1))
+    print("number of films", len(stratified_sample_df))
+    current_df = stratified_sample_df
 
     adjectives = []
     for i in wn.all_synsets():
@@ -222,28 +224,33 @@ def search_inference_criteria(df, input_column, multilabel):
                 adjectives.append(j.name())
 
 
-    n = 100
+    number_of_samples = 1
+    high_low_inference_criteria = []
+    current_rsquared_adj = 0
+
 
     while len(adjectives) > 0:
         print("number of adjectives left: ", len(adjectives))
         try:
-            high_low_inference_criteria = random.sample(adjectives, n)
+            pick_random_high_low_inference_criteria = random.sample(adjectives, number_of_samples)
         except ValueError:
-            high_low_inference_criteria = random.sample(adjectives, len(adjectives))
+            pick_random_high_low_inference_criteria = random.sample(adjectives, len(adjectives))
 
 
-
-        df_out = ac.code_custom_topics(docs=random_df[input_column].values, df=random_df[['title', input_column, 'meta_genres', 'meta_score']], labels=high_low_inference_criteria,
+        df_out = ac.code_custom_topics(docs=current_df[input_column].values, df=current_df[['title', input_column,'meta_genres','meta_score', *high_low_inference_criteria]],
+                                       labels=pick_random_high_low_inference_criteria,
                                    nli_template = search_nli_template, max_length=512, multilabel=multilabel,
                                    batch_size=32)
 
-        # standardizing dataframe
         df_out['meta_score'] = pd.to_numeric(df_out['meta_score'])
+
         df_z = df_out.select_dtypes(include=[np.number]).dropna().apply(stats.zscore)
 
         start = 'Q("'
         end = '")'
-        high_low_inference_criteria_qued = ["{}{}{}".format(start,i,end) for i in high_low_inference_criteria]
+        high_low_inference_criteria_qued = ["{}{}{}".format(start, i, end) for i in
+                                            list(df_out.columns)[4:]]
+
 
         independent_variables_formula = '+'.join(high_low_inference_criteria_qued)
 
@@ -254,7 +261,33 @@ def search_inference_criteria(df, input_column, multilabel):
         # checking results
         print(result.summary())
 
-        adjectives = [ele for ele in adjectives if ele not in high_low_inference_criteria]
+        param_results = {}
+        for name, params in list(result.params.items())[1:]:
+            param_results[name[3:-2]] = params
+
+        if result.rsquared_adj > current_rsquared_adj:
+            current_rsquared_adj = result.rsquared_adj
+            high_low_inference_criteria.append(pick_random_high_low_inference_criteria[0])
+
+
+        #high_low_inference_criteria.clear()
+        #for criterion in list(dict(reversed(sorted(param_results.items(), key=lambda item: abs(item[1])))).keys())[:4]:
+        #    if criterion not in high_low_inference_criteria:
+        #        high_low_inference_criteria.append(criterion)
+
+        print(high_low_inference_criteria)
+
+
+
+        adjectives = [ele for ele in adjectives if ele not in pick_random_high_low_inference_criteria]
+
+        timestr = time.strftime("%Y%m%d-%H%M%S")
+
+        df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_random_criteria_'+timestr+'_multilabel_big.h5', key='df')
+
+        current_df = df_out
+
+
 
 
 
@@ -269,5 +302,5 @@ def search_inference_criteria(df, input_column, multilabel):
 search_inference_criteria(df, 'meta_summary', multilabel=True)
 
 
-df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_amorality_multilabel_big.h5', key='df')
+#df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_amorality_multilabel_big.h5', key='df')
 
