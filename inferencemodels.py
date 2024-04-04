@@ -214,7 +214,7 @@ def search_inference_criteria(df, input_column, multilabel):
     search_nli_template = "This story is {}"
 
     stratified_sample_df = df.groupby('meta_score', group_keys=False).apply(lambda x: x.sample(frac=0.1))
-    print("number of films to infer: ", len(stratified_sample_df))
+    print("number of films to infer (stratified sample size): ", len(stratified_sample_df))
     current_df = stratified_sample_df
 
     adjectives = []
@@ -292,7 +292,7 @@ def full_inference_criteria(df, input_column, multilabel):
     search_nli_template = "This story is {}"
 
     stratified_sample_df = df.groupby('meta_score', group_keys=False).apply(lambda x: x.sample(frac=1))
-    print("number of films to infer: ", len(stratified_sample_df))
+    print("number of films to infer (stratified sample size): ", len(stratified_sample_df))
     current_df = stratified_sample_df
 
     adjectives = []
