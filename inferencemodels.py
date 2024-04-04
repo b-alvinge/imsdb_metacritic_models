@@ -214,7 +214,7 @@ def search_inference_criteria(df, input_column, multilabel):
     search_nli_template = "This story is {}"
 
     stratified_sample_df = df.groupby('meta_score', group_keys=False).apply(lambda x: x.sample(frac=0.1))
-    print("number of films", len(stratified_sample_df))
+    print("number of films to infer: ", len(stratified_sample_df))
     current_df = stratified_sample_df
 
     adjectives = []
@@ -287,7 +287,49 @@ def search_inference_criteria(df, input_column, multilabel):
 
         current_df = df_out
 
+#Function to convert all wordnet adjectives into inference columns.
+def full_inference_criteria(df, input_column, multilabel):
+    search_nli_template = "This story is {}"
 
+    stratified_sample_df = df.groupby('meta_score', group_keys=False).apply(lambda x: x.sample(frac=1))
+    print("number of films to infer: ", len(stratified_sample_df))
+    current_df = stratified_sample_df
+
+    adjectives = []
+    for i in wn.all_synsets():
+        if i.pos() in ['a', 's']:
+            for j in i.lemmas():
+                adjectives.append(j.name())
+
+
+
+    df_out = ac.code_custom_topics(docs=current_df[input_column].values, df=current_df[['title', input_column,'meta_genres','meta_score']],
+                                   labels=adjectives,
+                               nli_template = search_nli_template, max_length=512, multilabel=multilabel,
+                               batch_size=32)
+
+    df_out['meta_score'] = pd.to_numeric(df_out['meta_score'])
+
+    df_z = df_out.select_dtypes(include=[np.number]).dropna().apply(stats.zscore)
+
+    start = 'Q("'
+    end = '")'
+    high_low_inference_criteria_qued = ["{}{}{}".format(start, i, end) for i in
+                                        list(df_out.columns)[4:]]
+
+
+    independent_variables_formula = '+'.join(high_low_inference_criteria_qued)
+
+    # fitting regression
+    formula = 'Q("meta_score") ~ ' + independent_variables_formula
+    result = smf.ols(formula, data=df_z).fit()
+
+    # checking results
+    print(result.summary())
+
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+
+    df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_full_wordnet_criteria_'+timestr+'_multilabel_big.h5', key='df')
 
 
 
@@ -299,7 +341,9 @@ def search_inference_criteria(df, input_column, multilabel):
 
 #df_out = infer_aesthetic_qualities(df, 'script', multilabel=True, line_split=True)
 
-search_inference_criteria(df, 'meta_summary', multilabel=True)
+#search_inference_criteria(df, 'meta_summary', multilabel=True)
+
+full_inference_criteria(df, 'meta_summary', multilabel=True)
 
 
 #df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_amorality_multilabel_big.h5', key='df')
