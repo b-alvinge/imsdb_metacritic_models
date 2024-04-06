@@ -223,7 +223,7 @@ def search_inference_criteria(df, input_column, multilabel):
             for j in i.lemmas():
                 adjectives.append(j.name())
 
-
+    adjectives = list(set(adjectives))
     number_of_samples = 1
     high_low_inference_criteria = []
     current_rsquared_adj = 0
@@ -291,9 +291,16 @@ def search_inference_criteria(df, input_column, multilabel):
 def full_inference_criteria(df, input_column, multilabel):
     search_nli_template = "This story is {}"
 
-    stratified_sample_df = df.groupby('meta_score', group_keys=False).apply(lambda x: x.sample(frac=1))
-    print("number of films to infer (stratified sample size): ", len(stratified_sample_df))
-    current_df = stratified_sample_df
+    # Step 1: Group by 'meta_score' and filter out groups with fewer than 20 observations.
+    filtered_groups = df.groupby('meta_score').filter(lambda x: len(x) >= 20)
+
+    # Step 2: Sample 20 observations from each remaining group.
+    sample_df = filtered_groups.groupby('meta_score').apply(lambda x: x.sample(n=20))
+
+    print("number of films to infer (equal stratified sample size): ", len(sample_df))
+
+    current_df = sample_df
+
 
     adjectives = []
     for i in wn.all_synsets():
@@ -301,7 +308,7 @@ def full_inference_criteria(df, input_column, multilabel):
             for j in i.lemmas():
                 adjectives.append(j.name())
 
-
+    adjectives = list(set(adjectives))
 
     df_out = ac.code_custom_topics(docs=current_df[input_column].values, df=current_df[['title', input_column,'meta_genres','meta_score']],
                                    labels=adjectives,
@@ -309,27 +316,11 @@ def full_inference_criteria(df, input_column, multilabel):
                                batch_size=32)
 
     df_out['meta_score'] = pd.to_numeric(df_out['meta_score'])
-
-    df_z = df_out.select_dtypes(include=[np.number]).dropna().apply(stats.zscore)
-
-    start = 'Q("'
-    end = '")'
-    high_low_inference_criteria_qued = ["{}{}{}".format(start, i, end) for i in
-                                        list(df_out.columns)[4:]]
-
-
-    independent_variables_formula = '+'.join(high_low_inference_criteria_qued)
-
-    # fitting regression
-    formula = 'Q("meta_score") ~ ' + independent_variables_formula
-    result = smf.ols(formula, data=df_z).fit()
-
-    # checking results
-    print(result.summary())
-
     timestr = time.strftime("%Y%m%d-%H%M%S")
+    df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_full_wordnet_criteria_'+timestr+'_multilabel_'+str(len(sample_df))+'.h5', key='df')
 
-    df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_full_wordnet_criteria_'+timestr+'_multilabel_big.h5', key='df')
+
+
 
 
 
