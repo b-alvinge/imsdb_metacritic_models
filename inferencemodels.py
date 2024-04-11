@@ -287,20 +287,9 @@ def search_inference_criteria(df, input_column, multilabel):
 
         current_df = df_out
 
-#Function to convert all wordnet adjectives into inference columns.
-def full_inference_criteria(df, input_column, multilabel):
+#Function to convert a subset of adjectives into inference columns for a full sample
+def full_sample_criteria(df, input_column, multilabel):
     search_nli_template = "This story is {}"
-
-    # Step 1: Group by 'meta_score' and filter out groups with fewer than 20 observations.
-    filtered_groups = df.groupby('meta_score').filter(lambda x: len(x) >= 20)
-
-    # Step 2: Sample 20 observations from each remaining group.
-    sample_df = filtered_groups.groupby('meta_score').apply(lambda x: x.sample(n=20))
-
-    print("number of films to infer (equal stratified sample size): ", len(sample_df))
-
-    current_df = sample_df
-
 
     adjectives = []
     for i in wn.all_synsets():
@@ -310,14 +299,16 @@ def full_inference_criteria(df, input_column, multilabel):
 
     adjectives = list(set(adjectives))
 
-    df_out = ac.code_custom_topics(docs=current_df[input_column].values, df=current_df[['title', input_column,'meta_genres','meta_score']],
+    adjectives = random.sample(adjectives, 1)
+
+    df_out = ac.code_custom_topics(docs=df[input_column].values, df=df[['title', input_column,'meta_genres','meta_score']],
                                    labels=adjectives,
                                nli_template = search_nli_template, max_length=512, multilabel=multilabel,
                                batch_size=32)
 
     df_out['meta_score'] = pd.to_numeric(df_out['meta_score'])
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_full_wordnet_criteria_'+timestr+'_multilabel_'+str(len(sample_df))+'.h5', key='df')
+    df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_subset_wordnet_criteria_'+timestr+'_multilabel_'+str(len(df))+'.h5', key='df')
 
 
 
@@ -334,7 +325,9 @@ def full_inference_criteria(df, input_column, multilabel):
 
 #search_inference_criteria(df, 'meta_summary', multilabel=True)
 
-full_inference_criteria(df, 'meta_summary', multilabel=True)
+#full_inference_criteria(df, 'meta_summary', multilabel=True)
+
+full_sample_criteria(df, 'meta_summary', multilabel=True)
 
 
 #df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_amorality_multilabel_big.h5', key='df')
