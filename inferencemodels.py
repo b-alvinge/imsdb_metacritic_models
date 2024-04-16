@@ -32,7 +32,7 @@ ac = Autocoder()
 torch.cuda.empty_cache()
 
 # Function to infer genres for a given set of texts.
-def infer_genres(df, input_column, multilabel, line_split):
+def infer_genres(df, input_column, multilabel, line_split=False):
     genre_nli_template = "The genre of this text is {}"
     genres = ['Action',
              'Adventure',
@@ -287,6 +287,30 @@ def search_inference_criteria(df, input_column, multilabel):
 
         current_df = df_out
 
+#Function to convert all adjectives into inference columns for a part sample
+def full_adjectives_criteria(df, input_column, multilabel):
+    search_nli_template = "This story is {}"
+
+    sampled_df = df.groupby('meta_score').filter(lambda x: len(x) >= 20).groupby('meta_score').sample(n=20,
+                                                                                                      random_state=1)
+
+    adjectives = []
+    for i in wn.all_synsets():
+        if i.pos() in ['a', 's']:
+            for j in i.lemmas():
+                adjectives.append(j.name())
+
+    adjectives = list(set(adjectives))
+
+    df_out = ac.code_custom_topics(docs=sampled_df[input_column].values, df=sampled_df[['title', input_column,'meta_genres','meta_score']],
+                                   labels=adjectives,
+                               nli_template = search_nli_template, max_length=512, multilabel=multilabel,
+                               batch_size=32)
+
+    df_out['meta_score'] = pd.to_numeric(df_out['meta_score'])
+    timestr = time.strftime("%Y%m%d-%H%M%S")
+    df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_full_adjectives_'+timestr+'_multilabel_'+str(len(sampled_df))+'.h5', key='df')
+
 #Function to convert a subset of adjectives into inference columns for a full sample
 def full_sample_criteria(df, input_column, multilabel):
     search_nli_template = "This story is {}"
@@ -298,8 +322,8 @@ def full_sample_criteria(df, input_column, multilabel):
                 adjectives.append(j.name())
 
     adjectives = list(set(adjectives))
-
-    adjectives = random.sample(adjectives, 1)
+    nr_of_adjectives = 1000
+    adjectives = random.sample(adjectives, nr_of_adjectives)
 
     df_out = ac.code_custom_topics(docs=df[input_column].values, df=df[['title', input_column,'meta_genres','meta_score']],
                                    labels=adjectives,
@@ -308,14 +332,14 @@ def full_sample_criteria(df, input_column, multilabel):
 
     df_out['meta_score'] = pd.to_numeric(df_out['meta_score'])
     timestr = time.strftime("%Y%m%d-%H%M%S")
-    df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_subset_wordnet_criteria_'+timestr+'_multilabel_'+str(len(df))+'.h5', key='df')
+    df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_'+str(nr_of_adjectives)+'_adjectives_'+timestr+'_multilabel_'+str(len(df))+'.h5', key='df')
 
 
 
 
 
 
-#df_out = infer_genres(df, 'script', multilabel=True, line_split=True)
+#df_out = infer_genres(df[:1000], 'meta_summary', multilabel=True)
 
 #df_out = infer_amorality(df, 'meta_summary', multilabel=True, line_split=False)
 
@@ -325,10 +349,10 @@ def full_sample_criteria(df, input_column, multilabel):
 
 #search_inference_criteria(df, 'meta_summary', multilabel=True)
 
-#full_inference_criteria(df, 'meta_summary', multilabel=True)
+full_adjectives_criteria(df, 'meta_summary', multilabel=True)
 
-full_sample_criteria(df, 'meta_summary', multilabel=True)
+#full_sample_criteria(df, 'meta_summary', multilabel=True)
 
 
-#df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_amorality_multilabel_big.h5', key='df')
+#df_out.to_hdf('./data/out/title_metasummary_metagenres_metascore_genres_multilabel_big.h5', key='df')
 
