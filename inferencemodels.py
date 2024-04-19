@@ -14,6 +14,10 @@ import time
 
 from nltk.corpus import wordnet as wn
 
+import spacy
+
+nlp = spacy.load("en_core_web_sm")
+
 import torch
 
 # Example: Load your dataset
@@ -28,8 +32,19 @@ print("data rows after cleaning scores: ",len(df))
 if 'script' in df.columns:
     df['script'] = df['script'].replace(r'_x000D_','', regex=True)
 
+
+
+def remove_adjectives(text):
+    doc = nlp(text)
+    cleaned_text = ' '.join([token.text for token in doc if token.pos_ != 'ADJ'])
+    return cleaned_text
+
+#df['meta_summary_without_adjectives'] = df['meta_summary'].apply(remove_adjectives)
+
 ac = Autocoder()
 torch.cuda.empty_cache()
+
+
 
 # Function to infer genres for a given set of texts.
 def infer_genres(df, input_column, multilabel, line_split=False):
@@ -291,8 +306,10 @@ def search_inference_criteria(df, input_column, multilabel):
 def full_adjectives_criteria(df, input_column, multilabel):
     search_nli_template = "This story is {}"
 
-    sampled_df = df.groupby('meta_score').filter(lambda x: len(x) >= 20).groupby('meta_score').sample(n=20,
+    sampled_df = df.groupby('meta_score').filter(lambda x: len(x) >= 100).groupby('meta_score').sample(n=100,
                                                                                                       random_state=1)
+
+    print(sampled_df['meta_score'].unique())
 
     adjectives = []
     for i in wn.all_synsets():
