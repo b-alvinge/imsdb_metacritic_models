@@ -306,10 +306,10 @@ def search_inference_criteria(df, input_column, multilabel):
 def full_adjectives_criteria(df, input_column, multilabel):
     search_nli_template = "This story is {}"
 
-    sampled_df = df.groupby('meta_score').filter(lambda x: len(x) >= 100).groupby('meta_score').sample(n=100,
+    sampled_df = df.groupby('meta_score').filter(lambda x: len(x) >= 200).groupby('meta_score').sample(n=200,
                                                                                                       random_state=1)
 
-    print(sampled_df['meta_score'].unique())
+    print("meta_scores sampled:", sampled_df['meta_score'].unique())
 
     adjectives = []
     for i in wn.all_synsets():
@@ -330,7 +330,7 @@ def full_adjectives_criteria(df, input_column, multilabel):
 
 #Function to convert a subset of adjectives into inference columns for a full sample
 def full_sample_criteria(df, input_column, multilabel):
-    search_nli_template = "This story is {}"
+    search_nli_template = "{}"
 
     adjectives = []
     for i in wn.all_synsets():
@@ -339,7 +339,7 @@ def full_sample_criteria(df, input_column, multilabel):
                 adjectives.append(j.name())
 
     adjectives = list(set(adjectives))
-    nr_of_adjectives = 1000
+    nr_of_adjectives = 500
     adjectives = random.sample(adjectives, nr_of_adjectives)
 
     df_out = ac.code_custom_topics(docs=df[input_column].values, df=df[['title', input_column,'meta_genres','meta_score']],
@@ -366,7 +366,7 @@ def full_sample_criteria(df, input_column, multilabel):
 
 #search_inference_criteria(df, 'meta_summary', multilabel=True)
 
-full_adjectives_criteria(df, 'meta_summary', multilabel=True)
+full_sample_criteria(df, 'meta_summary', multilabel=True)
 
 #full_sample_criteria(df, 'meta_summary', multilabel=True)
 

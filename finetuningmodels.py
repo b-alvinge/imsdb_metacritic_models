@@ -52,7 +52,7 @@ model = BertForSequenceClassification.from_pretrained(
 model = get_peft_model(model, lora_config)
 
 
-metric = evaluate.load("accuracy")
+metric = evaluate.load("mse")
 
 training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch",
                                  num_train_epochs=100,)
